@@ -40,15 +40,13 @@
 //! through an internal `Reader` cursor that surfaces truncation
 //! as an [`Error`].
 
-#![deny(
-    missing_docs,
-    unsafe_code,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing
-)]
+// The `missing_docs`, `unsafe_code`, `clippy::unwrap_used`,
+// `clippy::expect_used`, `clippy::panic`,
+// `clippy::arithmetic_side_effects`, and `clippy::indexing_slicing`
+// lints are declared in `Cargo.toml` under `[lints]` so they enforce on
+// every build regardless of the consuming workspace. pascalscript is used
+// in malware-analysis pipelines where every input byte is adversarial and
+// the parser must not panic.
 #![cfg_attr(
     test,
     allow(
@@ -82,7 +80,7 @@ pub use disasm::{ContainerSummary, DisasmDisplay};
 pub use error::Error;
 pub use header::{Header, IFPS_MAGIC, INVALID_VAL, PS_CURRENT_BUILD_NO, PS_LOW_BUILD_SUPPORT};
 pub use literal::Literal;
-pub use opcode::{CalcOp, CompareOp, ExceptionHandlerEnd, Opcode};
+pub use opcode::{CalcOp, CompareOp, ExceptionHandlerEnd, FlowType, Opcode};
 pub use operand::{Operand, VarRef};
 pub use proc::{ExternalProc, InternalProc, Proc, ProcKind};
 pub use ty::{BaseType, Type, TypeBody};

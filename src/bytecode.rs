@@ -34,6 +34,58 @@ pub struct Instruction<'a> {
     pub next_offset: u32,
 }
 
+impl Instruction<'_> {
+    /// Returns this instruction's primary branch target, if any.
+    ///
+    /// Conditional opcodes return their taken target. Exception-handler
+    /// setup opcodes carry multiple targets, so callers that need all of
+    /// them should use [`Self::branch_targets`].
+    pub fn branch_target(&self) -> Option<u32> {
+        self.branch_targets().into_iter().flatten().next()
+    }
+
+    /// Returns all explicit control-flow targets carried by this instruction.
+    pub fn branch_targets(&self) -> [Option<u32>; 4] {
+        match &self.opcode {
+            Opcode::Goto { offset }
+            | Opcode::PopAndGoto { offset }
+            | Opcode::Pop2AndGoto { offset } => [
+                relative_i32_target(self.next_offset, *offset),
+                None,
+                None,
+                None,
+            ],
+            Opcode::CondGoto { offset, .. } | Opcode::CondNotGoto { offset, .. } => [
+                relative_u32_target(self.next_offset, *offset),
+                None,
+                None,
+                None,
+            ],
+            Opcode::FlagGoto { target } => [Some(*target), None, None, None],
+            Opcode::PushExceptionHandler {
+                finally_offset,
+                exception_offset,
+                finally2_offset,
+                end_of_block,
+            } => [
+                Some(*finally_offset),
+                Some(*exception_offset),
+                Some(*finally2_offset),
+                Some(*end_of_block),
+            ],
+            _ => [None, None, None, None],
+        }
+    }
+}
+
+fn relative_i32_target(base: u32, offset: i32) -> Option<u32> {
+    base.checked_add_signed(offset)
+}
+
+fn relative_u32_target(base: u32, offset: u32) -> Option<u32> {
+    base.checked_add(offset)
+}
+
 /// Disassembly of one [`crate::InternalProc`].
 #[derive(Clone, Debug)]
 pub struct ProcDisasm<'a> {

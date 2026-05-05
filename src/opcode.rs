@@ -103,6 +103,22 @@ impl ExceptionHandlerEnd {
     }
 }
 
+/// High-level control-flow category for an IFPS opcode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FlowType {
+    /// Execution normally continues at the next instruction.
+    Fallthrough,
+    /// Execution continues at one unconditional target.
+    Branch,
+    /// Execution may continue at either the target or next instruction.
+    ConditionalBranch,
+    /// Execution exits the current procedure.
+    Return,
+    /// Execution installs exception-handler targets while also falling through.
+    ExceptionHandler,
+}
+
 /// One decoded IFPS instruction.
 ///
 /// Variants and their operand layout mirror `uPSUtils.pas:122-297`
@@ -231,6 +247,36 @@ impl Opcode<'_> {
             Self::Pop2AndGoto { .. } => 26,
             Self::Nop => 255,
         }
+    }
+
+    /// Returns this opcode's high-level control-flow category.
+    pub fn flow_type(&self) -> FlowType {
+        match self {
+            Self::Goto { .. }
+            | Self::FlagGoto { .. }
+            | Self::PopAndGoto { .. }
+            | Self::Pop2AndGoto { .. } => FlowType::Branch,
+            Self::CondGoto { .. } | Self::CondNotGoto { .. } => FlowType::ConditionalBranch,
+            Self::Return => FlowType::Return,
+            Self::PushExceptionHandler { .. } => FlowType::ExceptionHandler,
+            _ => FlowType::Fallthrough,
+        }
+    }
+
+    /// Returns `true` when this opcode can transfer control away from fallthrough.
+    pub fn is_branch(&self) -> bool {
+        matches!(
+            self.flow_type(),
+            FlowType::Branch | FlowType::ConditionalBranch | FlowType::ExceptionHandler
+        )
+    }
+
+    /// Returns `true` when this opcode ends the current linear block.
+    pub fn is_terminator(&self) -> bool {
+        matches!(
+            self.flow_type(),
+            FlowType::Branch | FlowType::ConditionalBranch | FlowType::Return
+        )
     }
 }
 

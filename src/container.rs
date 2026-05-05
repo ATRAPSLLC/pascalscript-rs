@@ -117,6 +117,18 @@ impl<'a> Container<'a> {
         &self.procs
     }
 
+    /// Returns the number of parsed procedures.
+    pub fn proc_count(&self) -> u32 {
+        u32::try_from(self.procs.len()).unwrap_or(u32::MAX)
+    }
+
+    /// Returns the procedure at `idx`, or `None` when out of range.
+    pub fn proc(&self, idx: u32) -> Option<&Proc<'a>> {
+        usize::try_from(idx)
+            .ok()
+            .and_then(|idx| self.procs.get(idx))
+    }
+
     /// Returns the parsed var table in declaration order.
     pub fn vars(&self) -> &[Var<'a>] {
         &self.vars
@@ -163,14 +175,10 @@ impl<'a> Container<'a> {
     ///   [`Error::UnknownBaseType`] / [`Error::Truncated`] when
     ///   an instruction can't be decoded.
     pub fn disassemble(&self, proc_index: u32) -> Result<Option<ProcDisasm<'a>>, Error> {
-        let count = u32::try_from(self.procs.len()).unwrap_or(u32::MAX);
-        let proc = self
-            .procs
-            .get(proc_index as usize)
-            .ok_or(Error::TypeIndexOutOfRange {
-                index: proc_index,
-                count,
-            })?;
+        let proc = self.proc(proc_index).ok_or(Error::TypeIndexOutOfRange {
+            index: proc_index,
+            count: self.proc_count(),
+        })?;
         let internal = match &proc.kind {
             ProcKind::Internal(int) => int,
             ProcKind::External(_) => return Ok(None),

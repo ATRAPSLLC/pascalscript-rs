@@ -305,8 +305,7 @@ mod tests {
 
     #[test]
     fn parses_bare_u32() {
-        let mut buf = Vec::new();
-        buf.push(5); // btU32
+        let buf = vec![5]; // btU32
         let mut r = Reader::new(&buf);
         let ty = parse_type(&mut r, 0).unwrap();
         assert_eq!(ty.base_type, BaseType::U32);
