@@ -1,6 +1,6 @@
 [package]
 name = "pascalscript"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Johann Kempter <admin@binflip.rs>"]
 rust-version = "1.85"

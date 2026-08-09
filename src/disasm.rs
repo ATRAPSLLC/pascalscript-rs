@@ -8,7 +8,11 @@
 //! fallbacks for unnamed entries. PC-relative branch targets
 //! (`Goto`, `PopAndGoto`, `Pop2AndGoto`) are resolved to absolute
 //! offsets via [`Instruction::next_offset`]; absolute branches
-//! (`FlagGoto`) print verbatim.
+//! (`FlagGoto`, the exception-handler regions) are stored
+//! procedure-locally and are rebased onto the proc's
+//! `bytecode_offset`, so every offset in a listing — the leading
+//! instruction offset and every printed target alike — is in one
+//! coordinate system.
 //!
 //! Control-flow reconstruction (loop / if-else detection from
 //! goto patterns) is deferred — the raw target offsets in the
@@ -19,7 +23,7 @@
 use std::fmt;
 
 use crate::{
-    bytecode::{Instruction, ProcDisasm},
+    bytecode::{Instruction, ProcDisasm, relative_target},
     container::Container,
     literal::Literal,
     opcode::{CalcOp, CompareOp, ExceptionHandlerEnd, Opcode},
@@ -122,7 +126,7 @@ impl fmt::Display for DisasmDisplay<'_, '_> {
             self.disasm.instructions.len(),
         )?;
         for inst in &self.disasm.instructions {
-            write_instruction(f, self.container, inst)?;
+            write_instruction(f, self.container, inst, self.disasm.bytecode_offset)?;
         }
         Ok(())
     }
@@ -138,10 +142,19 @@ fn format_proc_self_label(proc: &Proc<'_>) -> String {
     }
 }
 
+/// Writes one instruction line.
+///
+/// `bytecode_offset` is the owning proc's base in the IFPS blob. It is needed
+/// because `flaggoto` and the exception-handler regions store *procedure-local*
+/// absolute positions, whereas the leading `inst.offset` on every line — and
+/// every relative branch target — is blob-absolute. Printing them as stored
+/// would make a handler target unresolvable against the very listing it sits in
+/// for every proc but the first.
 fn write_instruction(
     f: &mut fmt::Formatter<'_>,
     container: &Container<'_>,
     inst: &Instruction<'_>,
+    bytecode_offset: u32,
 ) -> fmt::Result {
     write!(f, "  {:#06x}  ", inst.offset)?;
     match &inst.opcode {
@@ -227,7 +240,11 @@ fn write_instruction(
             if *invert { "not " } else { "" },
             FormatOperand::new(container, var),
         ),
-        Opcode::FlagGoto { target } => writeln!(f, "flag-goto   {target:#06x}"),
+        Opcode::FlagGoto { target } => writeln!(
+            f,
+            "flag-goto   {:#06x}",
+            relative_target(bytecode_offset, *target),
+        ),
         Opcode::PushExceptionHandler {
             finally_offset,
             exception_offset,
@@ -235,8 +252,11 @@ fn write_instruction(
             end_of_block,
         } => writeln!(
             f,
-            "try         finally={finally_offset:#06x} except={exception_offset:#06x} \
-             finally2={finally2_offset:#06x} end={end_of_block:#06x}",
+            "try         finally={:#06x} except={:#06x} finally2={:#06x} end={:#06x}",
+            relative_target(bytecode_offset, *finally_offset),
+            relative_target(bytecode_offset, *exception_offset),
+            relative_target(bytecode_offset, *finally2_offset),
+            relative_target(bytecode_offset, *end_of_block),
         ),
         Opcode::PopExceptionHandler { position } => {
             writeln!(f, "end-try     ({})", handler_end_name(*position),)
@@ -268,16 +288,11 @@ fn write_instruction(
 }
 
 fn absolute_target(next_offset: u32, signed_offset: i32) -> u32 {
-    let signed = i64::from(next_offset).wrapping_add(i64::from(signed_offset));
-    if signed < 0 {
-        0
-    } else {
-        u32::try_from(signed).unwrap_or(u32::MAX)
-    }
+    relative_target(next_offset, signed_offset as u32)
 }
 
 fn absolute_target_unsigned(next_offset: u32, unsigned_offset: u32) -> u32 {
-    next_offset.saturating_add(unsigned_offset)
+    relative_target(next_offset, unsigned_offset)
 }
 
 fn calc_op_name(op: CalcOp) -> &'static str {
