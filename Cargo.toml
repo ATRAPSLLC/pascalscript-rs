@@ -2,11 +2,10 @@
 name = "pascalscript"
 version = "0.1.2"
 edition = "2024"
-authors = ["Johann Kempter <admin@binflip.rs>"]
 rust-version = "1.85"
 description = "Read-only parser + disassembler for the RemObjects PascalScript III binary container format (IFPS)"
 license = "Apache-2.0"
-repository = "https://github.com/BinFlip/pascalscript-rs"
+repository = "https://github.com/ATRAPSLLC/pascalscript-rs"
 readme = "README.md"
 keywords = ["pascalscript", "ifps", "remobjects", "delphi", "parser"]
 categories = ["parser-implementations"]
