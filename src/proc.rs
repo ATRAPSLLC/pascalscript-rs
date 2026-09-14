@@ -1,16 +1,16 @@
-//! Proc-table walker — `LoadProcs` in
+//! Proc-table walker - `LoadProcs` in
 //! `uPSRuntime.pas:2802-2933`.
 //!
 //! Each `ProcCount` slot starts with `TPSProc = packed record
 //! Flags: Byte end;` (`uPSRuntime.pas:1223-1225`). The flag bits
 //! are:
 //!
-//! - `Flags & 1` — external proc (name + optional decl).
-//! - `Flags & 2` — exported (per-kind: internal procs gain
+//! - `Flags & 1` - external proc (name + optional decl).
+//! - `Flags & 2` - exported (per-kind: internal procs gain
 //!   export-name + decl; external procs aren't gated by this bit).
-//! - `Flags & 3 == 3` (external + exported) — external procs add
+//! - `Flags & 3 == 3` (external + exported) - external procs add
 //!   a 4-byte-prefixed decl after the name.
-//! - `Flags & 4` — has a build-21+ attribute block.
+//! - `Flags & 4` - has a build-21+ attribute block.
 //!
 //! External procs serialize as `(name_len: u8, name, [decl_len:
 //! u32, decl])`. Internal procs serialize as
@@ -25,7 +25,7 @@ const FLAG_EXPORTED: u8 = 0x02;
 const FLAG_HAS_ATTRIBUTES: u8 = 0x04;
 
 /// Address-space sentinel from upstream (`uPSUtils.pas:24`).
-/// `PSAddrNegativeStackStart = 0x40000000` — name/decl lengths
+/// `PSAddrNegativeStackStart = 0x40000000` - name/decl lengths
 /// must stay below this to be addressable.
 const MAX_NAME_LEN: u32 = 0x4000_0000;
 
@@ -35,7 +35,7 @@ pub struct Proc<'a> {
     /// Raw flag byte (preserves bits beyond the documented set
     /// for forward compatibility).
     pub flags_raw: u8,
-    /// Variant-specific data — external import vs. internal
+    /// Variant-specific data - external import vs. internal
     /// script-defined proc.
     pub kind: ProcKind<'a>,
     /// Build-21+ attributes attached to this proc, populated
@@ -52,7 +52,7 @@ pub enum ProcKind<'a> {
     /// script references the host by `name`; the host's runtime
     /// resolves and dispatches.
     External(ExternalProc<'a>),
-    /// Script-defined procedure — has bytecode at
+    /// Script-defined procedure - has bytecode at
     /// `(bytecode_offset, bytecode_len)` inside the IFPS blob.
     Internal(InternalProc<'a>),
 }
@@ -72,7 +72,7 @@ pub struct ExternalProc<'a> {
 #[derive(Clone, Debug)]
 pub struct InternalProc<'a> {
     /// Byte offset of the proc's bytecode within the IFPS blob.
-    /// 1-based in upstream — `Move(s[L2 + 1], …)` — but we
+    /// 1-based in upstream - `Move(s[L2 + 1], …)` - but we
     /// surface it as the 0-based offset that's actually useful.
     pub bytecode_offset: u32,
     /// Length of the bytecode body in bytes.
@@ -87,7 +87,7 @@ pub struct InternalProc<'a> {
 /// advancing `reader`. The caller is expected to push the
 /// resulting [`Proc`] onto the proc table and **then** invoke
 /// [`crate::attribute::parse_block`] when the
-/// returned `flags_raw` has [`FLAG_HAS_ATTRIBUTES`] set —
+/// returned `flags_raw` has [`FLAG_HAS_ATTRIBUTES`] set -
 /// matching upstream's `LoadProcs` push-then-attr order
 /// (`uPSRuntime.pas:2922-2932`).
 pub(crate) fn parse_proc<'a>(reader: &mut Reader<'a>, blob_len: usize) -> Result<Proc<'a>, Error> {
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn rejects_internal_proc_past_blob() {
-        // offset=0x10, length=0x100 — exceeds 0x40-byte blob.
+        // offset=0x10, length=0x100 - exceeds 0x40-byte blob.
         let mut buf = vec![0x00];
         put_le32(&mut buf, 0x10);
         put_le32(&mut buf, 0x100);

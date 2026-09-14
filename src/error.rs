@@ -16,7 +16,7 @@ use std::fmt;
 #[non_exhaustive]
 pub enum Error {
     /// `bytes` were too short to contain the field named by
-    /// `what` — typically the 28-byte header, or a fixed payload
+    /// `what` - typically the 28-byte header, or a fixed payload
     /// past the header.
     Truncated {
         /// Static label for the truncated structure.
@@ -60,7 +60,7 @@ pub enum Error {
         length: u32,
     },
     /// An integer overflow occurred while computing a buffer
-    /// offset or size — the input contains a value too large to
+    /// offset or size - the input contains a value too large to
     /// represent on this platform.
     Overflow {
         /// Static label identifying the overflowing computation.

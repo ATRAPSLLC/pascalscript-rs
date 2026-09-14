@@ -1,4 +1,4 @@
-//! Symbolic disassembly — render a [`ProcDisasm`] as text with
+//! Symbolic disassembly - render a [`ProcDisasm`] as text with
 //! operand indices resolved against the container's symbol
 //! tables.
 //!
@@ -10,12 +10,12 @@
 //! offsets via [`Instruction::next_offset`]; absolute branches
 //! (`FlagGoto`, the exception-handler regions) are stored
 //! procedure-locally and are rebased onto the proc's
-//! `bytecode_offset`, so every offset in a listing — the leading
-//! instruction offset and every printed target alike — is in one
+//! `bytecode_offset`, so every offset in a listing - the leading
+//! instruction offset and every printed target alike - is in one
 //! coordinate system.
 //!
 //! Control-flow reconstruction (loop / if-else detection from
-//! goto patterns) is deferred — the raw target offsets in the
+//! goto patterns) is deferred - the raw target offsets in the
 //! output are sufficient for tracing manually, and the
 //! basic-block analysis required for structural recovery is its
 //! own substantial layer.
@@ -31,7 +31,7 @@ use crate::{
     proc::{Proc, ProcKind},
 };
 
-/// One-line summary of a [`Container`] — counts of types, procs
+/// One-line summary of a [`Container`] - counts of types, procs
 /// (split into internal vs. external), vars, plus the wire build
 /// number. Suitable for triage / log output.
 ///
@@ -72,7 +72,7 @@ impl fmt::Display for ContainerSummary<'_, '_> {
         };
         write!(
             f,
-            "IFPS build {} — {} types, {} procs ({} internal / {} external), {} vars, {main_proc}",
+            "IFPS build {} - {} types, {} procs ({} internal / {} external), {} vars, {main_proc}",
             header.build_no,
             header.type_count,
             header.proc_count,
@@ -87,7 +87,7 @@ impl fmt::Display for ContainerSummary<'_, '_> {
 /// [`Container`] it came from for symbol resolution.
 ///
 /// Construct via [`Container::display`] or directly via
-/// [`Self::new`]. Implements [`fmt::Display`] — drop into
+/// [`Self::new`]. Implements [`fmt::Display`] - drop into
 /// `println!`, `format!`, or any other formatting context.
 #[derive(Clone, Copy)]
 pub struct DisasmDisplay<'a, 'c> {
@@ -146,8 +146,8 @@ fn format_proc_self_label(proc: &Proc<'_>) -> String {
 ///
 /// `bytecode_offset` is the owning proc's base in the IFPS blob. It is needed
 /// because `flaggoto` and the exception-handler regions store *procedure-local*
-/// absolute positions, whereas the leading `inst.offset` on every line — and
-/// every relative branch target — is blob-absolute. Printing them as stored
+/// absolute positions, whereas the leading `inst.offset` on every line - and
+/// every relative branch target - is blob-absolute. Printing them as stored
 /// would make a handler target unresolvable against the very listing it sits in
 /// for every proc but the first.
 fn write_instruction(

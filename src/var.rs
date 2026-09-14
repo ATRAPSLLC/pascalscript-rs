@@ -1,4 +1,4 @@
-//! Var-table walker — `LoadVars` in
+//! Var-table walker - `LoadVars` in
 //! `uPSRuntime.pas:2936-2989`.
 //!
 //! Each `VarCount` slot is a `TPSVar = packed record TypeNo:

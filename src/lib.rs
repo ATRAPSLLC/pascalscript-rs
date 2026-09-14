@@ -4,8 +4,8 @@
 //! RemObjects PascalScript is a Pascal-syntax scripting library
 //! widely embedded in Delphi applications (Inno Setup's `[Code]`
 //! sections being one of the most prominent users). This crate
-//! parses the on-disk binary form — header, type / proc / var
-//! / attribute tables, and the bytecode stream — into typed
+//! parses the on-disk binary form - header, type / proc / var
+//! / attribute tables, and the bytecode stream - into typed
 //! Rust views, plus surfaces a symbolic disassembly via
 //! [`Container::display`].
 //!

@@ -4,25 +4,25 @@
 //! Wire form is `VarType: u8 + Param: u32` followed by extra
 //! bytes that vary per `VarType`:
 //!
-//! - **0** — direct global / stack variable reference. 5 bytes.
-//! - **1** — typed temporary or literal. 5 bytes (type ref) plus
+//! - **0** - direct global / stack variable reference. 5 bytes.
+//! - **1** - typed temporary or literal. 5 bytes (type ref) plus
 //!   per-`BaseType` payload (see [`crate::Literal`]).
-//! - **2** — `base[const_index]` for record fields and
+//! - **2** - `base[const_index]` for record fields and
 //!   compile-time-fixed array indices. 9 bytes (5 + 4).
-//! - **3** — `base[var_index]` for dynamic array indices that
+//! - **3** - `base[var_index]` for dynamic array indices that
 //!   read another variable's value at runtime. 9 bytes (5 + 4).
 //!
 //! The `Param` value of a `VarType=0`/`2`/`3` outer reference
 //! splits at `PSAddrStackStart = 0x60000000`
 //! (`uPSUtils.pas:22`):
 //!
-//! - `Param < 0x40000000` (`PSAddrNegativeStackStart`) — global
+//! - `Param < 0x40000000` (`PSAddrNegativeStackStart`) - global
 //!   var index.
-//! - `Param >= 0x60000000` — stack-relative offset, with the
+//! - `Param >= 0x60000000` - stack-relative offset, with the
 //!   actual offset = `Param - 0x60000000` (the runtime adds
 //!   `FCurrStackBase` and subtracts `PSAddrStackStart`).
 //! - The `0x40000000..0x60000000` window is treated as
-//!   stack-relative by upstream too — same formula. We surface
+//!   stack-relative by upstream too - same formula. We surface
 //!   anything `>= 0x40000000` as [`VarRef::Stack`].
 
 use crate::{
@@ -46,7 +46,7 @@ const PS_ADDR_NEGATIVE_STACK_START: u32 = 0x4000_0000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VarRef {
     /// Index into the global-variable table. The runtime
-    /// validates `index < FGlobalVars.Count` at execute time —
+    /// validates `index < FGlobalVars.Count` at execute time -
     /// we don't validate at parse time because the global count
     /// is fixed by the `VarCount` header field, not the operand
     /// stream.
@@ -89,18 +89,18 @@ pub enum Operand<'a> {
         /// Decoded payload.
         value: Literal<'a>,
     },
-    /// `base[const_index]` (`VarType=2`) — compile-time-fixed
+    /// `base[const_index]` (`VarType=2`) - compile-time-fixed
     /// record-field or static-array index.
     Indexed {
         /// Base var being indexed.
         base: VarRef,
         /// Constant index into the base's record fields or
         /// array elements, depending on the base's resolved
-        /// type. We don't resolve which kind here — the index
+        /// type. We don't resolve which kind here - the index
         /// is always 4 wire bytes.
         sub_index: u32,
     },
-    /// `base[var_index]` (`VarType=3`) — dynamic array index
+    /// `base[var_index]` (`VarType=3`) - dynamic array index
     /// read at runtime from another variable.
     DynamicIndexed {
         /// Base var being indexed.
