@@ -129,42 +129,42 @@ pub enum FlowType {
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Opcode<'a> {
-    /// `CM_A = 0` — `dest := src`. Two operands.
+    /// `CM_A = 0` - `dest := src`. Two operands.
     Assign { dest: Operand<'a>, src: Operand<'a> },
-    /// `CM_CA = 1` — `dest := dest <op> src`. CalcType byte +
+    /// `CM_CA = 1` - `dest := dest <op> src`. CalcType byte +
     /// two operands.
     CalculateAssign {
         op: CalcOp,
         dest: Operand<'a>,
         src: Operand<'a>,
     },
-    /// `CM_P = 2` — push variable.
+    /// `CM_P = 2` - push variable.
     Push { var: Operand<'a> },
-    /// `CM_PV = 3` — push var-by-reference.
+    /// `CM_PV = 3` - push var-by-reference.
     PushVar { var: Operand<'a> },
-    /// `CM_PO = 4` — pop top of stack. No operands.
+    /// `CM_PO = 4` - pop top of stack. No operands.
     Pop,
-    /// `Cm_C = 5` — call procedure by index.
+    /// `Cm_C = 5` - call procedure by index.
     Call { proc_no: u32 },
-    /// `Cm_G = 6` — unconditional goto, signed PC-relative
+    /// `Cm_G = 6` - unconditional goto, signed PC-relative
     /// offset from end-of-instruction.
     Goto { offset: i32 },
-    /// `Cm_CG = 7` — `if pop() then goto`. Unsigned PC-relative
+    /// `Cm_CG = 7` - `if pop() then goto`. Unsigned PC-relative
     /// offset + condition operand.
     CondGoto { offset: u32, cond: Operand<'a> },
-    /// `Cm_CNG = 8` — `if not pop() then goto`. Same shape as
+    /// `Cm_CNG = 8` - `if not pop() then goto`. Same shape as
     /// `CondGoto`.
     CondNotGoto { offset: u32, cond: Operand<'a> },
-    /// `Cm_R = 9` — return from procedure.
+    /// `Cm_R = 9` - return from procedure.
     Return,
-    /// `Cm_ST = 10` — set stack type at offset.
+    /// `Cm_ST = 10` - set stack type at offset.
     SetStackType {
         new_type: u32,
         offset_from_base: u32,
     },
-    /// `Cm_Pt = 11` — push a typed temporary onto the stack.
+    /// `Cm_Pt = 11` - push a typed temporary onto the stack.
     PushType { type_no: u32 },
-    /// `CM_CO = 12` — compare two operands and store the
+    /// `CM_CO = 12` - compare two operands and store the
     /// boolean result into `into`.
     Compare {
         op: CompareOp,
@@ -172,22 +172,22 @@ pub enum Opcode<'a> {
         lhs: Operand<'a>,
         rhs: Operand<'a>,
     },
-    /// `Cm_cv = 13` — call procedure whose index is the
+    /// `Cm_cv = 13` - call procedure whose index is the
     /// runtime value of `var`.
     CallVar { var: Operand<'a> },
-    /// `cm_sp = 14` — `dest := @src` (set pointer).
+    /// `cm_sp = 14` - `dest := @src` (set pointer).
     SetPointer { dest: Operand<'a>, src: Operand<'a> },
-    /// `cm_bn = 15` — boolean NOT in place.
+    /// `cm_bn = 15` - boolean NOT in place.
     BoolNot { var: Operand<'a> },
-    /// `cm_vm = 16` — arithmetic negation in place.
+    /// `cm_vm = 16` - arithmetic negation in place.
     Negate { var: Operand<'a> },
-    /// `cm_sf = 17` — set the saved compare flag from `var`,
+    /// `cm_sf = 17` - set the saved compare flag from `var`,
     /// optionally inverted.
     SetFlag { var: Operand<'a>, invert: bool },
-    /// `cm_fg = 18` — unconditional goto if the saved compare
+    /// `cm_fg = 18` - unconditional goto if the saved compare
     /// flag is set. Absolute target offset.
     FlagGoto { target: u32 },
-    /// `cm_puexh = 19` — push a four-section exception handler
+    /// `cm_puexh = 19` - push a four-section exception handler
     /// frame (try/finally/except/finally2).
     PushExceptionHandler {
         finally_offset: u32,
@@ -195,22 +195,22 @@ pub enum Opcode<'a> {
         finally2_offset: u32,
         end_of_block: u32,
     },
-    /// `cm_poexh = 20` — pop one section of an exception
+    /// `cm_poexh = 20` - pop one section of an exception
     /// handler frame.
     PopExceptionHandler { position: ExceptionHandlerEnd },
-    /// `cm_in = 21` — bitwise NOT in place.
+    /// `cm_in = 21` - bitwise NOT in place.
     IntegerNot { var: Operand<'a> },
-    /// `cm_spc = 22` — copy stack-pointer state.
+    /// `cm_spc = 22` - copy stack-pointer state.
     SetStackPointerToCopy { target: u32 },
-    /// `cm_inc = 23` — increment in place.
+    /// `cm_inc = 23` - increment in place.
     Inc { var: Operand<'a> },
-    /// `cm_dec = 24` — decrement in place.
+    /// `cm_dec = 24` - decrement in place.
     Dec { var: Operand<'a> },
-    /// `Cm_PG = 25` — pop one stack slot then goto.
+    /// `Cm_PG = 25` - pop one stack slot then goto.
     PopAndGoto { offset: i32 },
-    /// `Cm_P2G = 26` — pop two stack slots then goto.
+    /// `Cm_P2G = 26` - pop two stack slots then goto.
     Pop2AndGoto { offset: i32 },
-    /// `cm_nop = 255` — no operation.
+    /// `cm_nop = 255` - no operation.
     Nop,
 }
 

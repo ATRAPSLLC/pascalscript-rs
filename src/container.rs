@@ -20,7 +20,7 @@ use crate::{
 
 /// Parsed IFPS blob.
 ///
-/// Borrows from the original byte slice — names, decls, and
+/// Borrows from the original byte slice - names, decls, and
 /// bytecode regions all reference the original buffer rather
 /// than allocating.
 #[derive(Clone, Debug)]
@@ -38,7 +38,7 @@ impl<'a> Container<'a> {
     /// # Errors
     ///
     /// Returns whatever [`Header::parse`] or any of the per-table
-    /// walkers (types, procs, vars) surface — see [`Error`] for
+    /// walkers (types, procs, vars) surface - see [`Error`] for
     /// the full set.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, Error> {
         let header = Header::parse(bytes)?;
@@ -151,8 +151,8 @@ impl<'a> Container<'a> {
         DisasmDisplay::new(self, disasm)
     }
 
-    /// Returns a [`ContainerSummary`] — single-line
-    /// `fmt::Display`-ready triage view (`IFPS build N — A
+    /// Returns a [`ContainerSummary`] - single-line
+    /// `fmt::Display`-ready triage view (`IFPS build N - A
     /// types, B procs (X internal / Y external), C vars, main=…`).
     pub fn display_summary(&self) -> ContainerSummary<'a, '_> {
         ContainerSummary::new(self)

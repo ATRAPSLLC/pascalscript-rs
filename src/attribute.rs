@@ -1,8 +1,8 @@
-//! Attribute-block walker — `ReadAttributes` in
+//! Attribute-block walker - `ReadAttributes` in
 //! `uPSRuntime.pas:2333-2532`.
 //!
 //! Build-21+ attaches an inline attribute block at the end of
-//! every type and proc entry (vars do not carry attributes — see
+//! every type and proc entry (vars do not carry attributes - see
 //! `LoadVars`, `uPSRuntime.pas:2936-2989`). The block layout is:
 //!
 //! ```text
@@ -15,7 +15,7 @@
 //!         payload: per-BaseType (see `AttributeFieldValue`)
 //! ```
 //!
-//! Reading an attribute requires the type table parsed so far —
+//! Reading an attribute requires the type table parsed so far -
 //! the per-field payload's size depends on the referenced type's
 //! `BaseType` (and its body, in the `Set` case).
 
@@ -36,7 +36,7 @@ pub type AttributeFieldValue<'a> = Literal<'a>;
 /// One parsed attribute.
 #[derive(Clone, Debug)]
 pub struct Attribute<'a> {
-    /// ASCII identifier — the attribute "name" the script
+    /// ASCII identifier - the attribute "name" the script
     /// declared, e.g. `Description`.
     pub name: &'a [u8],
     /// Field values in declaration order.
@@ -46,7 +46,7 @@ pub struct Attribute<'a> {
 /// One field of an [`Attribute`].
 #[derive(Clone, Debug)]
 pub struct AttributeField<'a> {
-    /// Index into the type table — describes the field's type.
+    /// Index into the type table - describes the field's type.
     pub type_no: u32,
     /// Decoded wire value.
     pub value: Literal<'a>,
@@ -57,7 +57,7 @@ const MAX_NAME_LEN: u32 = 0x4000_0000;
 /// Parses the attribute block at `reader`'s cursor into a vec of
 /// [`Attribute`]s.
 ///
-/// `types` is the type table parsed so far — including the
+/// `types` is the type table parsed so far - including the
 /// current entry, since upstream pushes the type onto `FTypes`
 /// before reading its attribute block (`uPSRuntime.pas:2789-2798`).
 /// Empty blocks (count == 0) return `Ok(vec![])`.

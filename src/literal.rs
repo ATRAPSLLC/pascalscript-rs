@@ -25,7 +25,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Literal<'a> {
-    /// `btSet` — `ceil(bit_size / 8)` bytes (size derived from
+    /// `btSet` - `ceil(bit_size / 8)` bytes (size derived from
     /// the referenced type's [`TypeBody::Set`]).
     Set(&'a [u8]),
     /// `btU8` (1 byte).
@@ -44,7 +44,7 @@ pub enum Literal<'a> {
     U32(u32),
     /// `btS32` (4 bytes, signed).
     S32(i32),
-    /// `btProcPtr` (4 bytes — proc-table index).
+    /// `btProcPtr` (4 bytes - proc-table index).
     ProcPtr(u32),
     /// `btSingle` (4 bytes IEEE-754 binary32, raw).
     Single([u8; 4]),
@@ -54,18 +54,18 @@ pub enum Literal<'a> {
     S64(i64),
     /// `btDouble` (8 bytes IEEE-754 binary64, raw).
     Double([u8; 8]),
-    /// `btCurrency` (8 bytes — Delphi `Currency`, scaled by 1e4).
+    /// `btCurrency` (8 bytes - Delphi `Currency`, scaled by 1e4).
     Currency([u8; 8]),
-    /// `btExtended` (10 bytes — Delphi `Extended`, x86 80-bit).
+    /// `btExtended` (10 bytes - Delphi `Extended`, x86 80-bit).
     Extended([u8; 10]),
-    /// `btString` / `btPChar` — ANSI / Windows-1252 bytes
+    /// `btString` / `btPChar` - ANSI / Windows-1252 bytes
     /// (length-prefixed on the wire; we surface the bytes only).
     String(&'a [u8]),
-    /// `btWideString` — UTF-16LE bytes. The on-disk length is
+    /// `btWideString` - UTF-16LE bytes. The on-disk length is
     /// the count of UTF-16 code units; the byte slice has length
     /// `2 * count`.
     WideString(&'a [u8]),
-    /// `btUnicodeString` — UTF-16LE bytes. Same encoding as
+    /// `btUnicodeString` - UTF-16LE bytes. Same encoding as
     /// `WideString`; PascalScript distinguishes the type but the
     /// wire form is identical.
     UnicodeString(&'a [u8]),

@@ -1,11 +1,11 @@
-//! Type-table walker — `LoadTypes` in
+//! Type-table walker - `LoadTypes` in
 //! `uPSRuntime.pas:2538-2799`.
 //!
 //! Each `TypeCount` slot starts with a 1-byte
 //! `BaseType`-plus-flag byte. Bit 7 of the byte signals "has
 //! export name"; the low 7 bits are the actual `BaseType`
 //! constant (`uPSUtils.pas:46-118`). The on-disk constants only
-//! reach `btU64 = 29` — `btType = 130`, `btEnum = 129`, and
+//! reach `btU64 = 29` - `btType = 130`, `btEnum = 129`, and
 //! `btExtClass = 131` are runtime-only sentinels and never appear
 //! in serialized data.
 //!
@@ -19,7 +19,7 @@ use crate::{attribute::Attribute, error::Error, reader::Reader};
 ///
 /// Source: `uPSUtils.pas:46-112` (constants 0-29). The runtime
 /// sentinels `btType = 130`, `btEnum = 129`, `btExtClass = 131`
-/// are excluded — they never appear in serialized data per
+/// are excluded - they never appear in serialized data per
 /// `LoadTypes`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -105,34 +105,34 @@ pub enum TypeBody<'a> {
     /// No type-specific payload (numeric primitives, strings,
     /// pointers, variants).
     Bare,
-    /// `btClass` — class-name string (≤ 255 bytes).
+    /// `btClass` - class-name string (≤ 255 bytes).
     Class {
         /// Raw class-name bytes (ASCII / Windows-1252 in
         /// upstream).
         name: &'a [u8],
     },
-    /// `btProcPtr` — variable-length parameter-info string.
+    /// `btProcPtr` - variable-length parameter-info string.
     ProcPtr {
         /// Raw param-info bytes.
         param_info: &'a [u8],
     },
-    /// `btInterface` — 16-byte interface GUID.
+    /// `btInterface` - 16-byte interface GUID.
     Interface {
-        /// Raw GUID bytes (Microsoft byte order — this struct
+        /// Raw GUID bytes (Microsoft byte order - this struct
         /// does NOT canonicalize to RFC 4122).
         guid: [u8; 16],
     },
-    /// `btSet` — bit count (≤ 256).
+    /// `btSet` - bit count (≤ 256).
     Set {
         /// Number of bits the set carries on the wire.
         bit_size: u32,
     },
-    /// `btArray` — dynamic array; element-type index.
+    /// `btArray` - dynamic array; element-type index.
     Array {
         /// Index into the type table for the element type.
         element_type: u32,
     },
-    /// `btStaticArray` — fixed-length array.
+    /// `btStaticArray` - fixed-length array.
     StaticArray {
         /// Index into the type table for the element type.
         element_type: u32,
@@ -142,7 +142,7 @@ pub enum TypeBody<'a> {
         /// at non-zero indices).
         start_offset: u32,
     },
-    /// `btRecord` — list of field-type indices.
+    /// `btRecord` - list of field-type indices.
     Record {
         /// One type-table index per field, in declaration order.
         field_types: Vec<u32>,
@@ -173,7 +173,7 @@ const MAX_SET_BIT_SIZE: u32 = 256;
 /// to push the resulting [`Type`] onto the type table and
 /// **then** invoke
 /// [`crate::attribute::parse_block`] for builds
-/// ≥ 21 — matching upstream's `LoadTypes` push-then-attr order
+/// ≥ 21 - matching upstream's `LoadTypes` push-then-attr order
 /// (`uPSRuntime.pas:2789-2798`).
 pub(crate) fn parse_type<'a>(reader: &mut Reader<'a>, so_far: u32) -> Result<Type<'a>, Error> {
     let raw = reader.u8("type BaseType")?;
@@ -284,7 +284,7 @@ fn parse_body<'a>(
 }
 
 fn check_type_ref(idx: u32, so_far: u32) -> Result<(), Error> {
-    // Upstream rejects forward references too — a type can only
+    // Upstream rejects forward references too - a type can only
     // refer to entries that have already been defined.
     if idx >= so_far {
         return Err(Error::TypeIndexOutOfRange {

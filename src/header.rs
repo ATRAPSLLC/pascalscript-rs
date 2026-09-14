@@ -1,4 +1,4 @@
-//! `TPSHeader` — the fixed 28-byte preamble of every IFPS blob.
+//! `TPSHeader` - the fixed 28-byte preamble of every IFPS blob.
 //!
 //! Wire layout (`uPSRuntime.pas:1204-1212`):
 //!
@@ -16,12 +16,12 @@
 //!
 //! The `ImportTableSize` field is included for forward parity with
 //! the upstream layout but `LoadData` (`uPSRuntime.pas:3030`) does
-//! not actually walk an import table — externals are stored
+//! not actually walk an import table - externals are stored
 //! inline on the proc table, with their `Flags & 1` bit set.
 
 use crate::{error::Error, reader::Reader};
 
-/// Canonical magic byte sequence — first 4 bytes of every IFPS
+/// Canonical magic byte sequence - first 4 bytes of every IFPS
 /// blob. Mirrors [`PS_VALID_HEADER`].
 pub const IFPS_MAGIC: [u8; 4] = *b"IFPS";
 
@@ -43,7 +43,7 @@ pub const PS_CURRENT_BUILD_NO: u32 = 23;
 /// <> InvalidVal`).
 pub const INVALID_VAL: u32 = u32::MAX;
 
-/// Total header size in bytes — `SizeOf(TPSHeader)` in upstream.
+/// Total header size in bytes - `SizeOf(TPSHeader)` in upstream.
 pub const HEADER_SIZE: usize = 28;
 
 /// Parsed [`TPSHeader`](https://github.com/remobjects/pascalscript)
@@ -66,7 +66,7 @@ pub struct Header {
     pub main_proc_no: u32,
     /// Trailing `ImportTableSize` field. Retained for layout
     /// parity but has no functional role at the supported build
-    /// range — the proc table carries import data inline.
+    /// range - the proc table carries import data inline.
     pub import_table_size: u32,
 }
 

@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 pub struct Instruction<'a> {
     /// Offset of this instruction's leading byte within the
-    /// IFPS blob — same coordinate system as
+    /// IFPS blob - same coordinate system as
     /// [`crate::InternalProc::bytecode_offset`].
     /// Useful when chasing PC-relative branches: a `Goto`
     /// instruction's `offset` is relative to the byte
@@ -41,7 +41,7 @@ impl Instruction<'_> {
     /// setup opcodes carry multiple targets, so callers that need all of
     /// them should use [`Self::branch_targets`].
     ///
-    /// Carries the same coordinate caveat as [`Self::branch_targets`] — prefer
+    /// Carries the same coordinate caveat as [`Self::branch_targets`] - prefer
     /// [`ProcDisasm::branch_target`], which normalizes every form to IFPS-blob
     /// coordinates.
     pub fn branch_target(&self) -> Option<u32> {
@@ -57,7 +57,7 @@ impl Instruction<'_> {
     ///
     /// - Relative branches (`goto`, `condgoto`, `condnotgoto`, the pop-and-goto
     ///   forms) resolve against [`Self::next_offset`], which is an IFPS-blob
-    ///   offset — so these come back **blob-absolute**. A delta is
+    ///   offset - so these come back **blob-absolute**. A delta is
     ///   coordinate-independent, so this is exact.
     /// - `flaggoto` and the four `PushExceptionHandler` regions store an
     ///   *absolute* position, and IFPS positions are **procedure-local** (the VM
@@ -106,7 +106,7 @@ impl Instruction<'_> {
 /// pop-and-goto forms) encodes the same thing: a four-byte little-endian delta
 /// added to the position after the instruction. The VM performs that addition
 /// on Delphi `Cardinal`s (`CurrentPosition := CurrentPosition + NewPosition`),
-/// which wraps — so the compiler emits a **backward** branch as a large
+/// which wraps - so the compiler emits a **backward** branch as a large
 /// unsigned delta that wraps back around. Modelling the addition as
 /// checked or saturating therefore loses exactly the backward branches, i.e.
 /// every loop.
@@ -116,7 +116,7 @@ impl Instruction<'_> {
 /// both reach this function as a raw `u32` delta.
 ///
 /// The result can land outside the owning procedure when the input is
-/// malformed — IFPS producers are untrusted. Validating that is the caller's
+/// malformed - IFPS producers are untrusted. Validating that is the caller's
 /// job (the VM itself bounds-checks the new position against the proc length),
 /// which is why this returns a plain `u32` rather than an `Option`.
 pub(crate) fn relative_target(base: u32, delta: u32) -> u32 {
@@ -130,7 +130,7 @@ pub struct ProcDisasm<'a> {
     /// disassembled proc.
     pub proc_index: u32,
     /// Byte offset where the proc's bytecode starts inside the
-    /// IFPS blob — copied verbatim from
+    /// IFPS blob - copied verbatim from
     /// [`crate::InternalProc::bytecode_offset`] for
     /// cross-reference.
     pub bytecode_offset: u32,
@@ -152,7 +152,7 @@ impl ProcDisasm<'_> {
     }
 
     /// Returns every control-flow target `instruction` carries, all of them in
-    /// **IFPS-blob coordinates** — the same coordinate system as
+    /// **IFPS-blob coordinates** - the same coordinate system as
     /// [`Instruction::offset`], so a target can be compared directly against
     /// the instruction stream.
     ///
@@ -181,14 +181,14 @@ impl ProcDisasm<'_> {
 /// `blob` is the entire IFPS byte buffer; `bytecode_offset` and
 /// `bytecode_len` are the proc's window into that buffer
 /// (validated up-front by [`crate::proc::parse_proc`]).
-/// `types` is the parsed type table — needed for typed-literal
+/// `types` is the parsed type table - needed for typed-literal
 /// operand payloads.
 ///
 /// # Errors
 ///
 /// - [`Error::BytecodeOutOfRange`] when the window falls outside
 ///   `blob`.
-/// - Any error from the per-opcode decoder — bad opcode byte,
+/// - Any error from the per-opcode decoder - bad opcode byte,
 ///   malformed operand, truncated payload.
 pub(crate) fn disassemble_proc<'a>(
     blob: &'a [u8],
@@ -267,7 +267,7 @@ mod tests {
     }
 
     /// A backward conditional branch is encoded as a wrapping `Cardinal`
-    /// delta, exactly like the unconditional `goto` — resolving it with
+    /// delta, exactly like the unconditional `goto` - resolving it with
     /// checked or saturating arithmetic loses every loop in the program.
     #[test]
     fn backward_conditional_branch_wraps_to_a_target_behind_the_instruction() {
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(unconditional.branch_target(), conditional.branch_target());
     }
 
-    /// `flaggoto` carries an absolute position, not a delta — and on the bare
+    /// `flaggoto` carries an absolute position, not a delta - and on the bare
     /// instruction it comes back procedure-local, as stored.
     #[test]
     fn flag_goto_target_is_absolute() {
