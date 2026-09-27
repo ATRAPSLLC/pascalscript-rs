@@ -38,9 +38,10 @@ pub const PS_LOW_BUILD_SUPPORT: u32 = 12;
 /// Source: `uPSUtils.pas:16` (`PSCurrentBuildNo = 23`).
 pub const PS_CURRENT_BUILD_NO: u32 = 23;
 
-/// Sentinel value [`Header::main_proc_no`] uses when the blob has
-/// no entry point. Source: `uPSRuntime.pas:3024` (`HDR.MainProcNo
-/// <> InvalidVal`).
+/// The runtime's `InvalidVal`: what [`Header::main_proc_no`] holds
+/// when the blob has no entry point (`uPSRuntime.pas:3024`), and what
+/// an exception-handler section holds when the `try` has no such
+/// section ([`crate::Opcode::PushExceptionHandler`]).
 pub const INVALID_VAL: u32 = u32::MAX;
 
 /// Total header size in bytes - `SizeOf(TPSHeader)` in upstream.

@@ -18,7 +18,13 @@
 //! u32, export_name, decl_len: u32, decl])`. Both flavors may be
 //! followed by an attribute block when `Flags & 4` is set.
 
-use crate::{attribute::Attribute, error::Error, header::INVALID_VAL, reader::Reader};
+use crate::{
+    attribute::Attribute,
+    error::Error,
+    header::INVALID_VAL,
+    reader::Reader,
+    signature::{ExternalDecl, Signature},
+};
 
 const FLAG_EXTERNAL: u8 = 0x01;
 const FLAG_EXPORTED: u8 = 0x02;
@@ -81,6 +87,34 @@ pub struct InternalProc<'a> {
     pub export_name: Option<&'a [u8]>,
     /// Pascal-style type signature for exported procs.
     pub export_decl: Option<&'a [u8]>,
+}
+
+impl<'a> ExternalProc<'a> {
+    /// The procedure's declaration: its parameters, whether it returns a
+    /// value, and for a DLL import the library and function it names.
+    /// `None` when the entry carries no declaration.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::MalformedDecl`] when the declaration is not one the compiler
+    /// writes.
+    pub fn declaration(&self) -> Option<Result<ExternalDecl<'a>, Error>> {
+        self.decl.map(ExternalDecl::parse)
+    }
+}
+
+impl InternalProc<'_> {
+    /// The procedure's signature, from its export declaration: the result
+    /// and parameter types, and so what each of its stack slots holds
+    /// ([`Signature::slot`]). `None` for a procedure compiled without one.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::MalformedDecl`] when the declaration is not one the compiler
+    /// writes.
+    pub fn signature(&self) -> Option<Result<Signature, Error>> {
+        self.export_decl.map(Signature::of_internal)
+    }
 }
 
 /// Parses one proc-table entry's body (no attribute block),
