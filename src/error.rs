@@ -44,6 +44,34 @@ pub enum Error {
         /// Raw byte read from the type record.
         byte: u8,
     },
+    /// An opcode byte named no instruction the runtime executes
+    /// (`uPSUtils.pas:186-280`).
+    UnknownOpcode {
+        /// Raw opcode byte.
+        byte: u8,
+    },
+    /// An instruction's sub-operation byte (a calculation, a
+    /// comparison, an exception-handler section) named none of its
+    /// kind.
+    UnknownSubOp {
+        /// Which sub-operation was being read.
+        what: &'static str,
+        /// Raw byte read.
+        byte: u8,
+    },
+    /// A procedure declaration did not have the form its compiler writes
+    /// (see [`crate::signature`]).
+    MalformedDecl {
+        /// Which declaration form was being read.
+        what: &'static str,
+    },
+    /// A procedure body's stack height disagreed between two paths into one
+    /// instruction, or a pop would go below the frame base (see
+    /// [`crate::frame`]).
+    StackImbalance {
+        /// Offset of the instruction where it happened.
+        offset: u32,
+    },
     /// A type-table entry referenced an index outside the table.
     TypeIndexOutOfRange {
         /// Index that overflowed.
@@ -82,6 +110,16 @@ impl fmt::Display for Error {
             }
             Self::UnknownBaseType { byte } => {
                 write!(f, "unknown PascalScript BaseType: 0x{byte:02x}")
+            }
+            Self::UnknownOpcode { byte } => {
+                write!(f, "unknown PascalScript opcode: 0x{byte:02x}")
+            }
+            Self::UnknownSubOp { what, byte } => {
+                write!(f, "unknown PascalScript {what}: 0x{byte:02x}")
+            }
+            Self::MalformedDecl { what } => write!(f, "malformed {what}"),
+            Self::StackImbalance { offset } => {
+                write!(f, "stack height is inconsistent at {offset:#x}")
             }
             Self::TypeIndexOutOfRange { index, count } => {
                 write!(f, "type index {index} out of range (count={count})")

@@ -5,14 +5,12 @@
 //! Output is a per-instruction listing: 4-digit hex offset,
 //! mnemonic, operand list. Names come from the type / proc / var
 //! tables when available, with `g#N`, `s+N`, `proc#N`, `type#N`
-//! fallbacks for unnamed entries. PC-relative branch targets
-//! (`Goto`, `PopAndGoto`, `Pop2AndGoto`) are resolved to absolute
-//! offsets via [`Instruction::next_offset`]; absolute branches
-//! (`FlagGoto`, the exception-handler regions) are stored
-//! procedure-locally and are rebased onto the proc's
-//! `bytecode_offset`, so every offset in a listing - the leading
-//! instruction offset and every printed target alike - is in one
-//! coordinate system.
+//! fallbacks for unnamed entries. Every branch target - the gotos,
+//! `FlagGoto` and the exception-handler sections - is a delta from
+//! the end of its instruction, resolved via
+//! [`Instruction::branch_targets`], so every offset in a listing (the
+//! leading instruction offset and every printed target alike) is in
+//! one coordinate system.
 //!
 //! Control-flow reconstruction (loop / if-else detection from
 //! goto patterns) is deferred - the raw target offsets in the
@@ -126,7 +124,7 @@ impl fmt::Display for DisasmDisplay<'_, '_> {
             self.disasm.instructions.len(),
         )?;
         for inst in &self.disasm.instructions {
-            write_instruction(f, self.container, inst, self.disasm.bytecode_offset)?;
+            write_instruction(f, self.container, inst)?;
         }
         Ok(())
     }
@@ -143,18 +141,10 @@ fn format_proc_self_label(proc: &Proc<'_>) -> String {
 }
 
 /// Writes one instruction line.
-///
-/// `bytecode_offset` is the owning proc's base in the IFPS blob. It is needed
-/// because `flaggoto` and the exception-handler regions store *procedure-local*
-/// absolute positions, whereas the leading `inst.offset` on every line - and
-/// every relative branch target - is blob-absolute. Printing them as stored
-/// would make a handler target unresolvable against the very listing it sits in
-/// for every proc but the first.
 fn write_instruction(
     f: &mut fmt::Formatter<'_>,
     container: &Container<'_>,
     inst: &Instruction<'_>,
-    bytecode_offset: u32,
 ) -> fmt::Result {
     write!(f, "  {:#06x}  ", inst.offset)?;
     match &inst.opcode {
@@ -240,33 +230,34 @@ fn write_instruction(
             if *invert { "not " } else { "" },
             FormatOperand::new(container, var),
         ),
-        Opcode::FlagGoto { target } => writeln!(
+        Opcode::FlagGoto { offset } => writeln!(
             f,
             "flag-goto   {:#06x}",
-            relative_target(bytecode_offset, *target),
+            relative_target(inst.next_offset, *offset),
         ),
-        Opcode::PushExceptionHandler {
-            finally_offset,
-            exception_offset,
-            finally2_offset,
-            end_of_block,
-        } => writeln!(
-            f,
-            "try         finally={:#06x} except={:#06x} finally2={:#06x} end={:#06x}",
-            relative_target(bytecode_offset, *finally_offset),
-            relative_target(bytecode_offset, *exception_offset),
-            relative_target(bytecode_offset, *finally2_offset),
-            relative_target(bytecode_offset, *end_of_block),
-        ),
+        Opcode::PushExceptionHandler { .. } => {
+            let [finally, except, finally2, end] =
+                inst.branch_targets().map(|target| match target {
+                    Some(target) => format!("{target:#06x}"),
+                    None => "-".to_string(),
+                });
+            writeln!(
+                f,
+                "try         finally={finally} except={except} finally2={finally2} end={end}",
+            )
+        }
         Opcode::PopExceptionHandler { position } => {
             writeln!(f, "end-try     ({})", handler_end_name(*position),)
         }
         Opcode::IntegerNot { var } => {
             writeln!(f, "int-not     {}", FormatOperand::new(container, var))
         }
-        Opcode::SetStackPointerToCopy { target } => {
-            writeln!(f, "stack-copy  {target:#06x}")
-        }
+        Opcode::SetStackPointerToCopy { dest, src } => writeln!(
+            f,
+            "stack-copy  {} := copy {}",
+            FormatOperand::new(container, dest),
+            FormatOperand::new(container, src),
+        ),
         Opcode::Inc { var } => {
             writeln!(f, "inc         {}", FormatOperand::new(container, var))
         }

@@ -111,6 +111,21 @@ pub enum Operand<'a> {
     },
 }
 
+impl Operand<'_> {
+    /// Every variable the operand names: the variable itself, an indexed
+    /// operand's base, and a dynamic index's index variable. A literal names
+    /// none.
+    pub fn var_refs(&self) -> impl Iterator<Item = VarRef> {
+        let (first, second) = match *self {
+            Self::Var(var) => (Some(var), None),
+            Self::Indexed { base, .. } => (Some(base), None),
+            Self::DynamicIndexed { base, index_var } => (Some(base), Some(index_var)),
+            Self::Literal { .. } => (None, None),
+        };
+        first.into_iter().chain(second)
+    }
+}
+
 /// Reads one operand at `reader`'s cursor, advancing past it.
 pub(crate) fn parse_operand<'a>(
     reader: &mut Reader<'a>,

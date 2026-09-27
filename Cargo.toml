@@ -1,6 +1,6 @@
 [package]
 name = "pascalscript"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Read-only parser + disassembler for the RemObjects PascalScript III binary container format (IFPS)"

@@ -44,7 +44,10 @@ impl CalcOp {
             7 => Ok(Self::And),
             8 => Ok(Self::Or),
             9 => Ok(Self::Xor),
-            other => Err(Error::UnknownBaseType { byte: other }),
+            other => Err(Error::UnknownSubOp {
+                what: "CalcType",
+                byte: other,
+            }),
         }
     }
 }
@@ -72,7 +75,10 @@ impl CompareOp {
             3 => Ok(Self::Less),
             4 => Ok(Self::NotEqual),
             5 => Ok(Self::Equal),
-            other => Err(Error::UnknownBaseType { byte: other }),
+            other => Err(Error::UnknownSubOp {
+                what: "CompareType",
+                byte: other,
+            }),
         }
     }
 }
@@ -98,7 +104,10 @@ impl ExceptionHandlerEnd {
             1 => Ok(Self::EndOfFirstFinally),
             2 => Ok(Self::EndOfExcept),
             3 => Ok(Self::EndOfSecondFinally),
-            other => Err(Error::UnknownBaseType { byte: other }),
+            other => Err(Error::UnknownSubOp {
+                what: "exception-handler section",
+                byte: other,
+            }),
         }
     }
 }
@@ -184,11 +193,21 @@ pub enum Opcode<'a> {
     /// `cm_sf = 17` - set the saved compare flag from `var`,
     /// optionally inverted.
     SetFlag { var: Operand<'a>, invert: bool },
-    /// `cm_fg = 18` - unconditional goto if the saved compare
-    /// flag is set. Absolute target offset.
-    FlagGoto { target: u32 },
+    /// `cm_fg = 18` - goto when the saved compare flag is set.
+    ///
+    /// `offset` is a delta from the end of the instruction, as every
+    /// IFPS branch's is: the runtime adds it to the position after
+    /// the operand (`uPSRuntime.pas`, `cm_fg`).
+    FlagGoto { offset: u32 },
     /// `cm_puexh = 19` - push a four-section exception handler
     /// frame (try/finally/except/finally2).
+    ///
+    /// Each section is a delta from the end of the instruction, or
+    /// [`INVALID_VAL`](crate::INVALID_VAL) for a section the `try` does not have: the
+    /// compiler writes `0xFFFFFFFF` and patches in each section it
+    /// emits, and the runtime adds the position after the operands
+    /// to every section but an absent one (`uPSRuntime.pas`,
+    /// `cm_puexh`).
     PushExceptionHandler {
         finally_offset: u32,
         exception_offset: u32,
@@ -200,8 +219,9 @@ pub enum Opcode<'a> {
     PopExceptionHandler { position: ExceptionHandlerEnd },
     /// `cm_in = 21` - bitwise NOT in place.
     IntegerNot { var: Operand<'a> },
-    /// `cm_spc = 22` - copy stack-pointer state.
-    SetStackPointerToCopy { target: u32 },
+    /// `cm_spc = 22` - make the pointer `dest` point at a copy of
+    /// `src` (the compiler emits it to fill arrays of pointers).
+    SetStackPointerToCopy { dest: Operand<'a>, src: Operand<'a> },
     /// `cm_inc = 23` - increment in place.
     Inc { var: Operand<'a> },
     /// `cm_dec = 24` - decrement in place.
@@ -214,7 +234,7 @@ pub enum Opcode<'a> {
     Nop,
 }
 
-impl Opcode<'_> {
+impl<'a> Opcode<'a> {
     /// Numeric opcode byte (the leading byte of the wire form).
     pub fn raw_byte(&self) -> u8 {
         match self {
@@ -249,14 +269,39 @@ impl Opcode<'_> {
         }
     }
 
+    /// Every operand the instruction carries, in wire order.
+    #[must_use]
+    pub fn operands(&self) -> Vec<&Operand<'a>> {
+        match self {
+            Self::Assign { dest, src }
+            | Self::CalculateAssign { dest, src, .. }
+            | Self::SetPointer { dest, src }
+            | Self::SetStackPointerToCopy { dest, src } => vec![dest, src],
+            Self::Compare { into, lhs, rhs, .. } => vec![into, lhs, rhs],
+            Self::Push { var }
+            | Self::PushVar { var }
+            | Self::CallVar { var }
+            | Self::BoolNot { var }
+            | Self::Negate { var }
+            | Self::SetFlag { var, .. }
+            | Self::IntegerNot { var }
+            | Self::Inc { var }
+            | Self::Dec { var } => vec![var],
+            Self::CondGoto { cond, .. } | Self::CondNotGoto { cond, .. } => vec![cond],
+            _ => Vec::new(),
+        }
+    }
+
     /// Returns this opcode's high-level control-flow category.
     pub fn flow_type(&self) -> FlowType {
         match self {
-            Self::Goto { .. }
-            | Self::FlagGoto { .. }
-            | Self::PopAndGoto { .. }
-            | Self::Pop2AndGoto { .. } => FlowType::Branch,
-            Self::CondGoto { .. } | Self::CondNotGoto { .. } => FlowType::ConditionalBranch,
+            Self::Goto { .. } | Self::PopAndGoto { .. } | Self::Pop2AndGoto { .. } => {
+                FlowType::Branch
+            }
+            // `FlagGoto` branches only when the saved flag is set.
+            Self::CondGoto { .. } | Self::CondNotGoto { .. } | Self::FlagGoto { .. } => {
+                FlowType::ConditionalBranch
+            }
             Self::Return => FlowType::Return,
             Self::PushExceptionHandler { .. } => FlowType::ExceptionHandler,
             _ => FlowType::Fallthrough,
@@ -362,7 +407,7 @@ pub(crate) fn parse_opcode<'a>(
             Opcode::SetFlag { var, invert }
         }
         18 => Opcode::FlagGoto {
-            target: reader.u32_le("FlagGoto Where")?,
+            offset: reader.u32_le("FlagGoto Where")?,
         },
         19 => Opcode::PushExceptionHandler {
             finally_offset: reader.u32_le("ExceptionHandler FinallyOffset")?,
@@ -377,7 +422,8 @@ pub(crate) fn parse_opcode<'a>(
             var: parse_operand(reader, types)?,
         },
         22 => Opcode::SetStackPointerToCopy {
-            target: reader.u32_le("SetStackPointerToCopy Where")?,
+            dest: parse_operand(reader, types)?,
+            src: parse_operand(reader, types)?,
         },
         23 => Opcode::Inc {
             var: parse_operand(reader, types)?,
@@ -392,7 +438,7 @@ pub(crate) fn parse_opcode<'a>(
             offset: reader.i32_le("Pop2AndGoto NewPosition")?,
         },
         255 => Opcode::Nop,
-        other => return Err(Error::UnknownBaseType { byte: other }),
+        other => return Err(Error::UnknownOpcode { byte: other }),
     };
     Ok(op)
 }
@@ -515,10 +561,58 @@ mod tests {
         );
     }
 
+    /// An unknown opcode is reported as one, and an unknown sub-operation
+    /// names which kind it was; both used to read as an unknown base type.
     #[test]
     fn rejects_unknown_opcode() {
         let buf = vec![100u8];
         let mut r = Reader::new(&buf);
-        assert!(parse_opcode(&mut r, &[]).is_err());
+        assert_eq!(
+            parse_opcode(&mut r, &[]),
+            Err(Error::UnknownOpcode { byte: 100 })
+        );
+
+        let buf = vec![1u8, 42];
+        let mut r = Reader::new(&buf);
+        assert_eq!(
+            parse_opcode(&mut r, &[]),
+            Err(Error::UnknownSubOp {
+                what: "CalcType",
+                byte: 42,
+            })
+        );
+    }
+
+    /// `cm_spc` carries two variables, as the runtime reads them (`vd`, then
+    /// `vs`). Read as a `u32` it consumed five bytes of the first operand and
+    /// left the decoder mid-operand: the next instruction came out as garbage
+    /// and the whole procedure was dropped. The control is that next
+    /// instruction, which decodes.
+    #[test]
+    fn set_stack_pointer_to_copy_reads_two_variables() {
+        let mut buf = vec![22u8];
+        put_var(&mut buf, 0, 0x6000_0002); // dest = stack slot s+2
+        put_var(&mut buf, 0, 3); // src  = global #3
+        buf.push(9); // Return
+        let mut r = Reader::new(&buf);
+        assert_eq!(
+            parse_opcode(&mut r, &[]).unwrap(),
+            Opcode::SetStackPointerToCopy {
+                dest: Operand::Var(VarRef::Stack(2)),
+                src: Operand::Var(VarRef::Global(3)),
+            },
+        );
+        assert_eq!(parse_opcode(&mut r, &[]).unwrap(), Opcode::Return);
+    }
+
+    /// `FlagGoto` branches only when the saved flag is set, so its flow is
+    /// conditional; `Goto` is the unconditional one.
+    #[test]
+    fn flag_goto_is_a_conditional_branch() {
+        assert_eq!(
+            Opcode::FlagGoto { offset: 4 }.flow_type(),
+            FlowType::ConditionalBranch
+        );
+        assert_eq!(Opcode::Goto { offset: 4 }.flow_type(), FlowType::Branch);
     }
 }
