@@ -23,12 +23,17 @@ use crate::{
     opcode::Opcode,
 };
 
-/// The stack height before each instruction of one procedure.
+/// The stack height before each instruction of one procedure, and which
+/// instruction pushed each slot then live.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StackMap {
     /// Height before instruction `i` (the number of the body's own slots
     /// live), or `None` for an instruction no path reaches.
     heights: Vec<Option<u32>>,
+    /// For each instruction, the instruction that pushed each live slot, `s+1`
+    /// first: `None` where two paths reaching it disagree about which push
+    /// made a slot. Empty for an instruction no path reaches.
+    owners: Vec<Vec<Option<usize>>>,
 }
 
 /// The stack slots one call consumes: the top `count` of the caller's.
@@ -67,48 +72,78 @@ impl StackMap {
         let instructions = &disasm.instructions;
         let index_of = |offset: u32| instructions.iter().position(|i| i.offset == offset);
         let mut heights: Vec<Option<u32>> = vec![None; instructions.len()];
-        let mut work = VecDeque::new();
+        let mut owners: Vec<Vec<Option<usize>>> = vec![Vec::new(); instructions.len()];
+        let mut work: VecDeque<(usize, Vec<Option<usize>>)> = VecDeque::new();
         if !instructions.is_empty() {
-            work.push_back((0usize, 0u32));
+            work.push_back((0usize, Vec::new()));
         }
-        while let Some((index, height)) = work.pop_front() {
-            let Some(slot) = heights.get_mut(index) else {
+        while let Some((index, arriving)) = work.pop_front() {
+            let height =
+                u32::try_from(arriving.len()).map_err(|_| imbalance(instructions.get(index)))?;
+            let (Some(slot), Some(known)) = (heights.get_mut(index), owners.get_mut(index)) else {
                 continue;
             };
             match *slot {
-                Some(known) if known == height => continue,
-                Some(_) => {
+                Some(recorded) if recorded != height => {
                     return Err(imbalance(instructions.get(index)));
                 }
-                None => *slot = Some(height),
+                Some(_) => {
+                    // Another path: a slot two pushes may have made is owned
+                    // by neither, and only a change is worth propagating.
+                    let mut changed = false;
+                    for (owner, other) in known.iter_mut().zip(&arriving) {
+                        if owner.is_some() && owner != other {
+                            *owner = None;
+                            changed = true;
+                        }
+                    }
+                    if !changed {
+                        continue;
+                    }
+                }
+                None => {
+                    *slot = Some(height);
+                    *known = arriving;
+                }
             }
             let Some(instruction) = instructions.get(index) else {
                 continue;
             };
-            let after = height_after(instruction, height)?;
+            let before = owners.get(index).cloned().unwrap_or_default();
+            let after = owners_after(instruction, index, &before)?;
             let fallthrough = index
                 .checked_add(1)
                 .filter(|next| *next < instructions.len());
-            let mut go = |target: Option<u32>, height: u32| {
+            let mut go = |target: Option<u32>, stack: &Vec<Option<usize>>| {
                 if let Some(target) = target.and_then(index_of) {
-                    work.push_back((target, height));
+                    work.push_back((target, stack.clone()));
                 }
             };
             match &instruction.opcode {
                 Opcode::Return => {}
                 Opcode::Goto { .. } | Opcode::PopAndGoto { .. } | Opcode::Pop2AndGoto { .. } => {
-                    go(instruction.branch_target(), after);
+                    go(instruction.branch_target(), &after);
                 }
                 Opcode::CondGoto { .. } | Opcode::CondNotGoto { .. } | Opcode::FlagGoto { .. } => {
-                    go(instruction.branch_target(), after);
+                    go(instruction.branch_target(), &after);
                     if let Some(next) = fallthrough {
                         work.push_back((next, after));
                     }
                 }
+                // The end of a `try` section continues where the runtime sends
+                // it, not into the next section.
+                Opcode::PopExceptionHandler { .. } => match disasm.handler_exit(index) {
+                    Some(exit) => go(Some(exit), &after),
+                    None => {
+                        if let Some(next) = fallthrough {
+                            work.push_back((next, after));
+                        }
+                    }
+                },
                 Opcode::PushExceptionHandler { .. } => {
                     // Each section starts at the height the `try` saved.
                     for target in instruction.branch_targets() {
-                        go(target, height);
+                        go(target, &before);
                     }
                     if let Some(next) = fallthrough {
                         work.push_back((next, after));
@@ -121,7 +156,22 @@ impl StackMap {
                 }
             }
         }
-        Ok(Self { heights })
+        Ok(Self { heights, owners })
+    }
+
+    /// The instruction that pushed stack slot `s+offset` (`offset` from 1),
+    /// live before instruction `index`.
+    ///
+    /// A slot's offset names a different variable at different points: a body
+    /// pops a temporary and pushes another at the same height, of another
+    /// type. The push that made it is the variable's identity. `None` when
+    /// the slot is not live there, the instruction is unreachable, or two paths
+    /// reaching it disagree about which push made the slot - which the compiler
+    /// never emits, and which is not guessed at.
+    #[must_use]
+    pub fn slot_owner(&self, index: usize, offset: u32) -> Option<usize> {
+        let position = usize::try_from(offset).ok()?.checked_sub(1)?;
+        self.owners.get(index)?.get(position).copied().flatten()
     }
 
     /// The height before instruction `index`, or `None` when no path reaches
@@ -173,20 +223,29 @@ impl StackMap {
     }
 }
 
-/// The height after `instruction` runs at `height`.
-fn height_after(instruction: &Instruction<'_>, height: u32) -> Result<u32, Error> {
-    let pop = |n: u32| {
-        height
+/// The live slots' owners after `instruction`, the one at `index`, runs with
+/// `before` live: a push adds a slot it owns, a pop removes the top.
+fn owners_after(
+    instruction: &Instruction<'_>,
+    index: usize,
+    before: &[Option<usize>],
+) -> Result<Vec<Option<usize>>, Error> {
+    let pop = |n: usize| {
+        let kept = before
+            .len()
             .checked_sub(n)
-            .ok_or_else(|| imbalance(Some(instruction)))
+            .ok_or_else(|| imbalance(Some(instruction)))?;
+        Ok(before.get(..kept).map(<[_]>::to_vec).unwrap_or_default())
     };
     match instruction.opcode {
-        Opcode::PushType { .. } | Opcode::Push { .. } | Opcode::PushVar { .. } => height
-            .checked_add(1)
-            .ok_or_else(|| imbalance(Some(instruction))),
+        Opcode::PushType { .. } | Opcode::Push { .. } | Opcode::PushVar { .. } => {
+            let mut after = before.to_vec();
+            after.push(Some(index));
+            Ok(after)
+        }
         Opcode::Pop | Opcode::PopAndGoto { .. } => pop(1),
         Opcode::Pop2AndGoto { .. } => pop(2),
-        _ => Ok(height),
+        _ => Ok(before.to_vec()),
     }
 }
 
@@ -307,5 +366,35 @@ mod tests {
             underflow.stack_map(),
             Err(Error::StackImbalance { offset: 0x100 })
         );
+    }
+
+    /// **A slot's identity is the push that made it.** `s+1` holds a Boolean
+    /// temporary, is popped, and holds an integer one: two variables at one
+    /// offset. A push before a branch owns its slot on both arms and where
+    /// they meet again.
+    #[test]
+    fn a_slot_is_owned_by_the_push_that_made_it() {
+        let disasm = body(vec![
+            Opcode::PushType { type_no: 28 }, // 0: s+1, a Boolean
+            Opcode::Pop,                      // 1
+            Opcode::PushType { type_no: 11 }, // 2: s+1, an integer
+            Opcode::CondGoto {
+                offset: 1, // to 0x105, over the nop
+                cond: slot(1),
+            },
+            Opcode::Nop,    // 4
+            Opcode::Pop,    // 5
+            Opcode::Return, // 6
+        ]);
+        let map = disasm.stack_map().unwrap();
+        assert_eq!(map.slot_owner(1, 1), Some(0), "the Boolean's");
+        assert_eq!(
+            map.slot_owner(3, 1),
+            Some(2),
+            "the integer's, at one offset"
+        );
+        assert_eq!(map.slot_owner(5, 1), Some(2), "and where the arms meet");
+        assert_eq!(map.slot_owner(6, 1), None, "popped");
+        assert_eq!(map.slot_owner(3, 2), None, "never pushed");
     }
 }

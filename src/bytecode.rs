@@ -11,7 +11,7 @@
 use crate::{
     error::Error,
     header::INVALID_VAL,
-    opcode::{Opcode, parse_opcode},
+    opcode::{ExceptionHandlerEnd, Opcode, parse_opcode},
     reader::Reader,
     ty::Type,
 };
@@ -123,6 +123,99 @@ pub struct ProcDisasm<'a> {
     pub bytecode_offset: u32,
     /// Decoded instructions in source order.
     pub instructions: Vec<Instruction<'a>>,
+}
+
+/// One `try` a procedure installs ([`Opcode::PushExceptionHandler`]): where
+/// its body and each of its sections begin, in IFPS-blob coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Try {
+    /// Index of the instruction that installs it.
+    pub at: usize,
+    /// The first instruction of the protected body: the one after `at`.
+    pub body: u32,
+    /// The finally section, when the `try` has one.
+    pub finally: Option<u32>,
+    /// The except section, when the `try` has one.
+    pub except: Option<u32>,
+    /// The second finally section, when the `try` has one.
+    pub finally2: Option<u32>,
+    /// Where control continues once the `try` is done.
+    pub end: Option<u32>,
+}
+
+impl Try {
+    /// Where control continues, on the path no exception took, when a section
+    /// of this `try` ends ([`Opcode::PopExceptionHandler`] at `position`).
+    ///
+    /// The runtime's rule (`cm_poexh`): the end of the body runs the finally
+    /// section, else the second finally, else leaves; the end of the finally
+    /// or of the except section runs the second finally, else leaves; the end
+    /// of the second finally leaves. A section ended with an exception pending
+    /// re-raises instead, which is the exception's path, not this one.
+    #[must_use]
+    pub fn exit(&self, position: ExceptionHandlerEnd) -> Option<u32> {
+        match position {
+            ExceptionHandlerEnd::EndOfBlock => self.finally.or(self.finally2).or(self.end),
+            ExceptionHandlerEnd::EndOfFirstFinally | ExceptionHandlerEnd::EndOfExcept => {
+                self.finally2.or(self.end)
+            }
+            ExceptionHandlerEnd::EndOfSecondFinally => self.end,
+        }
+    }
+
+    /// Whether `offset` lies within the `try` - its body or any section.
+    fn contains(&self, offset: u32) -> bool {
+        self.end
+            .is_some_and(|end| (self.body..end).contains(&offset))
+    }
+}
+
+impl ProcDisasm<'_> {
+    /// Every `try` the procedure installs, in the order they appear.
+    #[must_use]
+    pub fn tries(&self) -> Vec<Try> {
+        self.instructions
+            .iter()
+            .enumerate()
+            .filter(|(_, instruction)| {
+                matches!(instruction.opcode, Opcode::PushExceptionHandler { .. })
+            })
+            .map(|(at, instruction)| {
+                let [finally, except, finally2, end] = instruction.branch_targets();
+                Try {
+                    at,
+                    body: instruction.next_offset,
+                    finally,
+                    except,
+                    finally2,
+                    end,
+                }
+            })
+            .collect()
+    }
+
+    /// The `try` whose section the [`Opcode::PopExceptionHandler`] at `index`
+    /// ends: the innermost one containing it, which is the one the runtime's
+    /// handler stack has on top there - the compiler nests them.
+    #[must_use]
+    pub fn try_of(&self, index: usize) -> Option<Try> {
+        let offset = self.instructions.get(index)?.offset;
+        self.tries()
+            .into_iter()
+            .filter(|candidate| candidate.contains(offset))
+            .max_by_key(|candidate| candidate.at)
+    }
+
+    /// Where control continues, on the path no exception took, after the
+    /// [`Opcode::PopExceptionHandler`] at `index` ([`Try::exit`]); `None` for
+    /// any other instruction, or one no `try` contains.
+    #[must_use]
+    pub fn handler_exit(&self, index: usize) -> Option<u32> {
+        let Opcode::PopExceptionHandler { position } = self.instructions.get(index)?.opcode else {
+            return None;
+        };
+        self.try_of(index)?.exit(position)
+    }
 }
 
 /// Decodes the bytecode body for an internal proc.
