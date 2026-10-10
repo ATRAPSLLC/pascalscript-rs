@@ -164,6 +164,126 @@ pub struct Type<'a> {
     pub attributes: Vec<Attribute<'a>>,
 }
 
+/// The machine a script's runtime was built for, as far as the memory layout
+/// of its values depends on it: the size of a pointer, of a `Variant` and of
+/// an `Extended`.
+///
+/// A value's layout is the runtime's (`TPSTypeRec.CalcSize`,
+/// `uPSRuntime.pas:1746-1790`): records are packed, each field at the sum of
+/// the sizes before it (`LoadTypes`' `resolve`), a static array is its
+/// elements back to back, and a dynamic array, a string and a class are a
+/// pointer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Machine {
+    /// A 32-bit runtime (`PointerSize = 4`), as Inno Setup's has been.
+    X86,
+    /// A 64-bit runtime (`CPU64`).
+    X64,
+}
+
+/// How deep [`Machine::size`] follows records and arrays nested in each
+/// other before refusing to answer: a type table the compiler writes nests
+/// far less, and a hostile one may refer to itself.
+const MAX_LAYOUT_DEPTH: u32 = 32;
+
+impl Machine {
+    /// The size of a pointer.
+    #[must_use]
+    pub const fn pointer_bytes(self) -> u32 {
+        match self {
+            Self::X86 => 4,
+            Self::X64 => 8,
+        }
+    }
+
+    /// The size in memory of a value of type `type_no` (`RealSize`), or
+    /// `None` when the type table does not say: an index out of range, a type
+    /// nested past any the compiler writes, or a size that overflows.
+    ///
+    /// # Arguments
+    ///
+    /// * `types` - The container's type table.
+    /// * `type_no` - The type.
+    #[must_use]
+    pub fn size(self, types: &[Type<'_>], type_no: u32) -> Option<u32> {
+        self.size_within(types, type_no, MAX_LAYOUT_DEPTH)
+    }
+
+    /// The offset of field `field` within a value of record type `record`,
+    /// or `None` when `record` is not a record or has no such field.
+    ///
+    /// # Arguments
+    ///
+    /// * `types` - The container's type table.
+    /// * `record` - The record type.
+    /// * `field` - The field, from 0.
+    #[must_use]
+    pub fn field_offset(self, types: &[Type<'_>], record: u32, field: u32) -> Option<u32> {
+        let TypeBody::Record { field_types } = &types.get(usize::try_from(record).ok()?)?.body
+        else {
+            return None;
+        };
+        let before = field_types.get(..usize::try_from(field).ok()?)?;
+        if usize::try_from(field).ok()? >= field_types.len() {
+            return None;
+        }
+        before.iter().try_fold(0u32, |offset, field_type| {
+            offset.checked_add(self.size(types, *field_type)?)
+        })
+    }
+
+    /// [`Self::size`], following at most `depth` levels of nesting.
+    fn size_within(self, types: &[Type<'_>], type_no: u32, depth: u32) -> Option<u32> {
+        let ty = types.get(usize::try_from(type_no).ok()?)?;
+        let pointer = self.pointer_bytes();
+        let nested = depth.checked_sub(1)?;
+        Some(match (&ty.base_type, &ty.body) {
+            (BaseType::Variant | BaseType::NotificationVariant, _) => match self {
+                Self::X86 => 16,
+                Self::X64 => 24,
+            },
+            (BaseType::Char | BaseType::S8 | BaseType::U8, _) => 1,
+            (BaseType::WideChar | BaseType::S16 | BaseType::U16, _) => 2,
+            (
+                BaseType::WideString
+                | BaseType::UnicodeString
+                | BaseType::Interface
+                | BaseType::Class
+                | BaseType::PChar
+                | BaseType::String
+                | BaseType::Array,
+                _,
+            ) => pointer,
+            (BaseType::Single | BaseType::S32 | BaseType::U32, _) => 4,
+            // A method pointer, and a pointer variable: the pointer, its type
+            // and whether it owns what it points to.
+            (BaseType::ProcPtr | BaseType::Pointer, _) => pointer.checked_mul(3)?,
+            (BaseType::Currency | BaseType::Double | BaseType::S64 | BaseType::U64, _) => 8,
+            (BaseType::Extended, _) => match self {
+                Self::X86 => 10,
+                Self::X64 => 8,
+            },
+            // `TBTReturnAddress`: the procedure, then two `Cardinal`s.
+            (BaseType::ReturnAddress, _) => pointer.checked_add(8)?,
+            (BaseType::Set, TypeBody::Set { bit_size }) => bit_size.div_ceil(8),
+            (
+                BaseType::StaticArray,
+                TypeBody::StaticArray {
+                    element_type, size, ..
+                },
+            ) => self
+                .size_within(types, *element_type, nested)?
+                .checked_mul(*size)?,
+            (BaseType::Record, TypeBody::Record { field_types }) => {
+                field_types.iter().try_fold(0u32, |total, field_type| {
+                    total.checked_add(self.size_within(types, *field_type, nested)?)
+                })?
+            }
+            _ => 0,
+        })
+    }
+}
+
 const HAS_EXPORT_NAME: u8 = 0x80;
 const MAX_NAME_LEN: u32 = 255;
 const MAX_SET_BIT_SIZE: u32 = 256;
@@ -350,5 +470,69 @@ mod tests {
             TypeBody::Record { field_types } => assert_eq!(field_types, vec![0, 1]),
             other => panic!("expected Record, got {other:?}"),
         }
+    }
+
+    fn ty(base_type: BaseType, body: TypeBody<'static>) -> Type<'static> {
+        Type {
+            base_type,
+            body,
+            export_name: None,
+            attributes: Vec::new(),
+        }
+    }
+
+    /// **A value is laid out as the runtime lays it out.** `code.iss`'s
+    /// `TCell` is two `Integer`s, packed: 8 bytes, `Y` at 4. A record of a
+    /// `Byte` then a `String` is packed too, so the string sits at 1. A
+    /// `TCounts = array[0..3] of Integer` is 16 bytes. A string is a pointer,
+    /// 4 bytes or 8 by the machine.
+    #[test]
+    fn a_value_is_laid_out_as_the_runtime_lays_it_out() {
+        let types = vec![
+            ty(BaseType::S32, TypeBody::Bare),
+            ty(BaseType::U8, TypeBody::Bare),
+            ty(BaseType::String, TypeBody::Bare),
+            ty(
+                BaseType::Record,
+                TypeBody::Record {
+                    field_types: vec![0, 0],
+                },
+            ),
+            ty(
+                BaseType::Record,
+                TypeBody::Record {
+                    field_types: vec![1, 2],
+                },
+            ),
+            ty(
+                BaseType::StaticArray,
+                TypeBody::StaticArray {
+                    element_type: 0,
+                    size: 4,
+                    start_offset: 0,
+                },
+            ),
+        ];
+        let x86 = Machine::X86;
+        assert_eq!(x86.size(&types, 3), Some(8));
+        assert_eq!(x86.field_offset(&types, 3, 1), Some(4));
+        assert_eq!(x86.field_offset(&types, 4, 1), Some(1), "packed");
+        assert_eq!(x86.size(&types, 4), Some(5));
+        assert_eq!(Machine::X64.size(&types, 4), Some(9));
+        assert_eq!(x86.size(&types, 5), Some(16));
+        assert_eq!(x86.field_offset(&types, 3, 2), None, "no third field");
+        assert_eq!(x86.field_offset(&types, 0, 0), None, "not a record");
+    }
+
+    /// A record that contains itself has no size, rather than no end.
+    #[test]
+    fn a_record_that_contains_itself_has_no_size() {
+        let types = vec![ty(
+            BaseType::Record,
+            TypeBody::Record {
+                field_types: vec![0],
+            },
+        )];
+        assert_eq!(Machine::X86.size(&types, 0), None);
     }
 }

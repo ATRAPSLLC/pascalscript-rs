@@ -2,6 +2,14 @@
 
 All notable changes to this crate are documented here.
 
+## 0.2.1
+
+- Added `StackMap::slot_owner`: the instruction whose push made a stack slot live before an instruction. A body pops a temporary and pushes another at the same height, often of another type, so a slot's offset names different variables at different points; the push that made it is the variable. Two paths that disagree about the push leave the slot without an owner rather than a guessed one. On `code-tool6_4_3.exe` every local a body names has one.
+- Added `Machine` (`X86`, `X64`) and the runtime's memory layout: `Machine::size` is a type's `RealSize` and `Machine::field_offset` a record field's offset, as `TPSTypeRec.CalcSize` and `LoadTypes` compute them - records packed, static arrays their elements back to back, dynamic arrays, strings and classes a pointer, pointers and method pointers three. A type table that nests past any the compiler writes, or refers to itself, has no size rather than no end.
+- Added `Try` and `ProcDisasm::tries`, `try_of` and `handler_exit`: each `try` a procedure installs, with its body and sections, and where control continues after a `PopExceptionHandler` on the path no exception took - the end of the body runs the finally section, else the second finally, else leaves; the end of the finally or except section runs the second finally, else leaves (`cm_poexh`). Read as falling through, the end of a `try..except` body ran straight into the except section.
+- Fixed `StackMap` following a `PopExceptionHandler` into the next section; it follows `handler_exit`.
+- Added `runtime::Builtin`: what each function the runtime registers itself (`TPSExec.RegisterStandardProcs`) does beyond computing its result - nothing, raise, update a variable passed by reference, read the exception being handled, or raise and never return. `Builtin::of` finds one by name in any case, as the runtime does; a host's function or a DLL import is not one.
+
 ## 0.2.0
 
 This release changes the public API: `ProcDisasm::branch_target()` / `branch_targets()` are removed, `FlagGoto`'s field is renamed, and `SetStackPointerToCopy` now carries two operands. Hence the minor version bump.
